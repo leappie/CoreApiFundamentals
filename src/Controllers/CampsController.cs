@@ -4,8 +4,11 @@ using CoreCodeCamp.Migrations;
 using CoreCodeCamp.Model;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore.Internal;
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
@@ -19,11 +22,13 @@ namespace CoreCodeCamp.Controllers
 
         private readonly ICampRepository _campRepository;
         private readonly IMapper _mapper;
+        private readonly LinkGenerator _linkGenerator;
 
-        public CampsController(ICampRepository campRepository, IMapper mapper)
+        public CampsController(ICampRepository campRepository, IMapper mapper, LinkGenerator linkGenerator)
         {
             _campRepository = campRepository;
             _mapper = mapper;
+            _linkGenerator = linkGenerator;
         }
 
         
@@ -68,10 +73,61 @@ namespace CoreCodeCamp.Controllers
             }
         }
 
+        // ../api/[controller]/search?date=2018-10-18
+        [HttpGet("search")]
+        public async Task<ActionResult<CampModel[]>> SearchByDate(DateTime date, bool includeTalks = false) // de query parameters worden bepaald door de method parameters
+        {
+            try
+            {
+                var result = await _campRepository.GetAllCampsByEventDate(date, includeTalks); 
+
+                if (!result.Any())
+                {
+                    return NotFound();
+                }
+
+                CampModel[] campModel = _mapper.Map<CampModel[]>(result); // Mapper maps a single object to another single object and an array or list to another array or list
+
+                return Ok(campModel);
+            }
+            catch
+            {
+                return this.StatusCode(StatusCodes.Status500InternalServerError, "Database failure");
+
+            }
+
+        }
+
         // POST api/<CampsController>
         [HttpPost]
-        public void Post([FromBody] string value)
+        public async Task<ActionResult<CampModel>> Post(CampModel model) // model binding if the post data is not in the model it is not accepted
         {
+            try
+            {
+                var location = _linkGenerator.GetPathByAction("Get", "Camps", new { moniker = model.Moniker }); // generate link for moniker
+                
+                if (string.IsNullOrWhiteSpace(location))
+                {
+                    return BadRequest("Could not use current moniker");
+                }
+
+                var camp = _mapper.Map<Camp>(model);
+                _campRepository.Add<Camp>(camp);
+                Console.WriteLine(camp);
+
+                if(await _campRepository.SaveChangesAsync())
+                {
+                    Console.WriteLine("Inside await");
+                    return Created($"/api/camps/{camp.Moniker}", _mapper.Map<CampModel>(camp));
+                }
+            }
+            catch
+            {
+                return this.StatusCode(StatusCodes.Status500InternalServerError, "Database failure");
+
+            }
+
+            return BadRequest();
         }
 
         // PUT api/<CampsController>/5
