@@ -13,8 +13,10 @@ namespace CoreCodeCamp.Data.AutoMapperProfiles
         public TalkProfile()
         {
             CreateMap<Talk, TalkModel>()
-                .ReverseMap();
-                //.ForMember(t => t.Camp, opt => opt.Ignore()).ForMember(t => t.Speaker, opt => opt.Ignore());
+                .ReverseMap()
+                .ForMember(t => t.Camp, opt => opt.Ignore())
+                .ForMember(t => t.Speaker, opt => opt.Ignore())
+                .ForMember(t => t.TalkId, opt => opt.Ignore()); // after reversemap because we dont want it to map these fields from talkmodel to talk
         }
     }
 }

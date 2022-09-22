@@ -35,8 +35,7 @@ namespace CoreCodeCamp.Controllers
             {
                 // Check if moniker exits
                 var existingCamp = await _campRepository.GetCampAsync(moniker);
-
-                if (existingCamp == null) return NotFound("Moniker not found");
+                if (existingCamp == null) return NotFound("Camp does not exist");
 
                 var talks = await _campRepository.GetTalksByMonikerAsync(moniker);
                 return _mapper.Map<TalkModel[]>(talks);
@@ -55,10 +54,10 @@ namespace CoreCodeCamp.Controllers
             {
                 // Check if moniker exits
                 var existingCamp = await _campRepository.GetCampAsync(moniker);
-
                 if (existingCamp == null) return NotFound("Camp does not exist");
 
-                var talk = await _campRepository.GetTalkByMonikerAsync(moniker, id, true);
+                var talk = await _campRepository.GetTalkByMonikerAsync(moniker, id, true); // true -> get speakers too
+                if (talk == null) return NotFound("Talk not found");
                 return _mapper.Map<TalkModel>(talk); // if id not found 204 error no content
             }
             catch (Exception)
@@ -68,18 +67,18 @@ namespace CoreCodeCamp.Controllers
         }
 
 
-        [HttpPost]
+        [HttpPost] // you are posting to the collection of talks so you dont need an id here
         public async Task<ActionResult<TalkModel>> PostTalk(string moniker, TalkModel model) // note the moniker is already part of the route
         {
             try
             {
-                // Check if moniker exits
+                // Get Camp
                 var existingCamp = await _campRepository.GetCampAsync(moniker);
                 if (existingCamp == null) return BadRequest("Camp does not exist");
 
                 // Get talk from model
                 var talk = _mapper.Map<Talk>(model);
-                talk.Camp = existingCamp;
+                talk.Camp = existingCamp; // camp must exist before posting something to it
 
                 if (model.Speaker == null) return BadRequest("Speaker ID is required");
                 var speaker = await _campRepository.GetSpeakerAsync(model.Speaker.SpeakerId);
@@ -88,15 +87,84 @@ namespace CoreCodeCamp.Controllers
 
                 _campRepository.Add(talk);
 
-                // Get created URI
-                var locationURI = _linkGenerator.GetPathByAction(
-                    "GetIndividualTalk",
-                    "Talks",
-                    new { moniker = moniker, id = talk.TalkId });
+                if (await _campRepository.SaveChangesAsync())
+                {
+                    // Get created URI
+                    var locationURI = _linkGenerator.GetPathByAction( // inside if because TalkId is updated by now
+                        "GetIndividualTalk",
+                        "Talks",
+                        new { moniker = moniker, id = talk.TalkId });
+
+                    return Created(locationURI, _mapper.Map<TalkModel>(talk));
+                }
+                else
+                {
+                    return BadRequest("Error creating talk");
+
+                }
+            }
+            catch (Exception)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, "Database Failure");
+            }
+        }
+
+        // TODO
+        [HttpPut("{id:int}")] // update on "api/camps/{moniker}/talks/{id}"
+        public async Task<ActionResult<TalkModel>> UpdateTalk(string moniker, int id, TalkModel model)
+        {
+            try
+            {
+                // Check if talk exits
+                var existingTalk = await _campRepository.GetTalkByMonikerAsync(moniker, id, true);
+                if (existingTalk == null) return NotFound("Talk not found");
+                _mapper.Map(model, existingTalk); // map your changes from talkmodel to talk 
+
+                if (model.Speaker != null) // update the speaker if it is included
+                {
+                    var speaker = await _campRepository.GetSpeakerAsync(model.Speaker.SpeakerId);
+                    if (speaker != null)
+                    {
+                        existingTalk.Speaker = speaker;
+                    }
+                }
+
+                if (await _campRepository.SaveChangesAsync()) // Throws exception when TalkID is not included.Because we have defined TalkID in TalkModel. It wil asign TalkID 0 to existingTalk. You can avoid this by ignorint this mapping or removing TalkID from TalkModel
+                {
+                    return _mapper.Map<TalkModel>(existingTalk);
+                }
+                else
+                {
+                    return BadRequest("Failed update");
+                }
+                throw new NotImplementedException();
+            }
+            catch (Exception)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, "Database Failure");
+            }
+
+        }
+
+
+        [HttpDelete("{id:int}")]
+        public async Task<ActionResult<TalkModel>> DeleteTalk(string moniker, int id)
+        {
+            try
+            {
+                // Check if talk exits 
+                var existingTalk = await _campRepository.GetTalkByMonikerAsync(moniker, id);
+                if (existingTalk == null) return BadRequest("Talk not found");
+
+                _campRepository.Delete(existingTalk);
 
                 if (await _campRepository.SaveChangesAsync())
                 {
-                    return Created(locationURI, _mapper.Map<TalkModel>(talk));
+                    return Ok();
+                }
+                else
+                {
+                    return BadRequest("Delete failed");
                 }
             }
             catch (Exception)
@@ -104,7 +172,6 @@ namespace CoreCodeCamp.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, "Database Failure");
             }
 
-            return BadRequest("Error creating talk");
         }
 
     }

@@ -12,18 +12,17 @@ using System.Threading.Tasks;
 
 namespace CoreCodeCamp.Controllers
 {
-    [Route("api/v{version:apiVersion}/[controller]")] // you need to do this everywhere where you use versions
-    [ApiVersion("1.0")]
-    [ApiVersion("1.1")]
+    [Route("api/v{version:apiVersion}/[controller]")]
+    [ApiVersion("2.0")]
     [ApiController]
-    public class CampsController : ControllerBase
+    public class Camps2Controller : ControllerBase
     {
         private readonly ICampRepository _campRepository;
         private readonly IMapper _mapper;
         private readonly LinkGenerator _linkGenerator;
 
         // after creating a CampProfile.cs for the mapping add the mapper to this class through Dependency Injection
-        public CampsController(ICampRepository campRepository, IMapper mapper, LinkGenerator linkGenerator) 
+        public Camps2Controller(ICampRepository campRepository, IMapper mapper, LinkGenerator linkGenerator)
         {
             _campRepository = campRepository;
             _mapper = mapper;
@@ -36,41 +35,24 @@ namespace CoreCodeCamp.Controllers
          * You can also specify the return type of the method. It will automatically return a 200 when the return type is correct
          */
         [HttpGet] // get on the same route api/[controller]
-        [ApiVersion("1.0")]
-        public async Task<ActionResult<CampModel[]>> Get(bool includeTalks = false)
+        public async Task<IActionResult> Get(bool includeTalks = false)
         {
             try
             {
                 var results = await _campRepository.GetAllCampsAsync(includeTalks);
+                var result = new
+                {
+                    Count = results.Count(),
+                    Results = _mapper.Map<CampModel[]>(results)
+                };
 
-                // Map the results to the desired model
-                CampModel[] models = _mapper.Map<CampModel[]>(results);
-                return Ok(models);
-            }
-            catch(Exception)
-            {
-                return this.StatusCode(StatusCodes.Status500InternalServerError, "Database Failure");
-            }
-        }
-
-        [HttpGet] // get on the same route api/[controller]
-        [ApiVersion("1.1")]
-        public async Task<ActionResult<CampModel[]>> GetV11()
-        {
-            try
-            {
-                var results = await _campRepository.GetAllCampsAsync(true);
-
-                // Map the results to the desired model
-                CampModel[] models = _mapper.Map<CampModel[]>(results);
-                return Ok(models);
+                return Ok(result);
             }
             catch (Exception)
             {
                 return this.StatusCode(StatusCodes.Status500InternalServerError, "Database Failure");
             }
         }
-
 
         /*
          * Get an individual Camp specified by the surrogate key
@@ -212,7 +194,7 @@ namespace CoreCodeCamp.Controllers
                 return this.StatusCode(StatusCodes.Status500InternalServerError, "Database Failure");
             }
 
-            return BadRequest("Failed to delete"); 
+            return BadRequest("Failed to delete");
         }
 
     }
